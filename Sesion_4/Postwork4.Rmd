@@ -1,0 +1,211 @@
+---
+title: "Postwork 4"
+author:
+- Orlando Antonio Aguilar Puerto
+- Mario Alberto Encinas Cardona
+- Emanuel Flores Martínez
+- Andrés Benjamín Sánchez Alvarado
+date: "16/01/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+### Desarrollo
+
+<div style="margin-bottom:35px;">
+</div>
+
+Ahora investigarás la dependencia o independencia del número de goles anotados por el equipo de casa y el número de goles anotados por el equipo visitante mediante un procedimiento denominado bootstrap, revisa bibliografía en internet para que tengas nociones de este desarrollo.
+
+1.Ya hemos estimado las probabilidades conjuntas de que el equipo de casa anote X=x goles (x=0,1,... ,8), y el equipo visitante anote Y=y goles (y=0,1,... ,6), en un partido. Obtén una tabla de cocientes al dividir estas probabilidades conjuntas por el producto de las probabilidades marginales correspondientes.
+
+<div style="margin-bottom:35px;">
+</div>
+
+Librerías
+```{r, results=F, message=FALSE, warning=FALSE}
+library(knitr)
+library(ggplot2)
+library(dplyr)
+library(rsample)
+library(normtest)
+require(nortest)
+
+```
+<div style="margin-bottom:35px;">
+</div>
+
+
+```{r, echo=FALSE}
+df.1718 <- read.csv('https://www.football-data.co.uk/mmz4281/1718/SP1.csv')
+df.1819 <- read.csv('https://www.football-data.co.uk/mmz4281/1819/SP1.csv')
+df.1920 <- read.csv('https://www.football-data.co.uk/mmz4281/1920/SP1.csv')
+suppressMessages(suppressWarnings(library(dplyr)))
+df.1920<-df.1920[,-3]
+df<-list(df.1718,df.1819,df.1920)
+df<-lapply(df,select,Date:FTR)
+df<-lapply(df,mutate,Date=as.Date(sub("00","20",as.character(as.Date(Date,format="%d/%m/%Y")))))
+basepostwork2<-do.call(rbind,df)
+
+```
+
+
+```{r cars}
+base<-basepostwork2
+base<-base[,c("FTHG","FTAG")] # extraemos las dos columnas de interés
+df.home<-base$FTHG
+df.visit<-base$FTAG
+
+
+prob.home<-prop.table(table(base$FTHG)) # Probabilidades marginales del equipo de casa
+prob.visit<-prop.table(table(base$FTAG)) # Probabilidades marginales del equipo visitante.
+conjunta<-prop.table(table(base$FTHG,base$FTAG)) # Probabilidad conjunta 
+
+cocientes<-conjunta
+
+```
+
+<div style="margin-bottom:50px;">
+</div>
+
+Calculamos la tabla de cocientes:
+
+
+```{r}
+for(i in 1:9){ for(j in 1:7){
+cocientes[i,j]<-cocientes[i,j]/(prob.home[i]*prob.visit[j]) }}
+
+
+```
+```{r, echo=FALSE}
+kable(cocientes, caption = "Casa/Visitante")
+```
+
+
+
+```{r pressure, echo=FALSE,fig.align='center'}
+distancias<-abs(cocientes-1)
+ggplot(as.data.frame(distancias),aes(Var1,Var2,fill=Freq)) + geom_tile() + labs(fill="Diferencia", caption = "Heatmap de diferencias absolutas entre cocientes y 1; entre más obscuro más cercano a 1",x="Casa",y="Visitante")
+```
+
+2. Mediante un procedimiento de boostrap, obtén más cocientes similares a los obtenidos en la tabla del punto anterior. Esto para tener una idea de las distribuciones de la cual vienen los cocientes en la tabla anterior. Menciona en cuáles casos le parece razonable suponer que los cocientes de la tabla en el punto 1, son iguales a 1 (en tal caso tendríamos independencia de las variables aleatorias X y Y).
+
+
+Observando la tabla de distribución conjunta, decidimos reducirla para solo tomar los valores de x,y=0,1,2,3,4, ya que las demás parejas de resultados son muy poco frecuentes.Se considerarán como atípicos.
+
+```{r}
+conjunta<-conjunta[1:5,1:5]
+
+```
+
+```{r, echo=F}
+kable(conjunta,caption = "Distribución conjunta reducida: Casa/Visitante")
+```
+
+
+```{r}
+cocientes_list<-list() # Creamos una lista para guardar cada table de cocientes.
+cocientes<-matrix(0,5,5) # Redefinimos la tabla como una matriz de 5x5
+medias<-0 # Creamos un vector para guardar las medias de cada tabla de cocientes.
+```
+
+
+
+Calculamos 1000 tablas de cocientes por medio de un reemuestreo con reemplazo
+```{r}
+
+for(n in 1:1000){
+
+resample<-sample(1:nrow(base),nrow(base),replace = TRUE)
+
+
+conjunta<-prop.table(table(df.home[resample],df.visit[resample]))
+
+conjunta<-conjunta[1:5,1:5]
+
+prob.home<-prop.table(table(df.home[resample]))
+prob.home<-prob.home[1:5]
+
+prob.visit<-prop.table(table(df.visit[resample]))
+prob.visit<-prob.visit[1:5]
+
+colnames(cocientes)<-c(0,1,2,3,4)
+rownames(cocientes)<-c(0,1,2,3,4)
+
+# Calculamos la tabla de cocientes
+for(i in 1:length(prob.home)){
+  for(j in 1:length(prob.visit)){
+    
+    cocientes[i,j]<-conjunta[i,j]/(prob.home[i]*prob.visit[j])
+    
+  }  
+}
+medias[n]<-mean(cocientes)
+cocientes_list[[n]]<-cocientes
+}
+
+```
+
+
+
+Para determinar la independencia de las variables, tomaremos el promedio de la tabla de cocientes como estadístico.
+
+```{r}
+medias<-as.data.frame(medias)
+ggplot(medias) + geom_histogram(aes(x=medias),bins=40) + geom_vline(aes(xintercept = mean(medias),color="Media global"),linetype="dashed") + labs(title = "Distribución de medias de tablas cociente",x="Medias",y="Frecuencia")
+```
+
+<div style="margin-bottom:35px;">
+</div>
+
+
+Para finalmente determinar si las variables son independientes, recurriremos a una prueba de hipótesis.
+
+
+Realizamos pruebas de normalidad de nuestra poblacion de medias para corroborar los supuestos:
+
+```{r}
+norm.tests<-0
+ad<-ad.test(medias$medias)
+li<-lillie.test(medias$medias)
+pear<-pearson.test(medias$medias)
+sw<-shapiro.test(medias$medias)
+ks<-ks.test(medias$medias,'pnorm')
+
+norm.tests<-c(ad$p.value,li$p.value,pear$p.value,sw$p.value,ks$p.value)
+
+
+
+names(norm.tests)<-c("Anderson Darling","Lilliefors","Pearson","Shapiro'Wilks","Kolmogorov-Smirnof")
+norm.tests<-as.data.frame(norm.tests)
+names(norm.tests)<-"p-valores"
+kable(norm.tests,caption="p-valores de pruebas de normalidad") #Todas las pruebas rechazan normalidad, ya que sus H0 es que las medias provienen de una distribución normal. Todos los pvalues<.05, lo cual rechaza normalidad
+```
+
+```{r}
+
+```
+
+
+Considerando una significancia del 5%, todas las pruebas rechazan la normalidad de las medias, ya que todos los p-valores son menores a .05.
+
+
+Por lo tanto, se realiza la prueba no paramétrica de Wilcoxon, ya que no necesita de supuestos de distribución y además es muy útil cuando se tienen datos con distribución simétrica.
+
+```{r}
+wilcox.test(medias$medias,alternative = "two.sided",mu=1)
+```
+
+Con un p-valor muy pequeño, se rechaza la hipotesis de que nuestra media es igual a 1, por lo que rechazamos la independencia.
+
+Esto coincide con la naturaleza de las variables. Durante un partido, influye mucho la marcación del un equipo con el del otro.
+Si un equipo lleva una ventaja considerable (de 2 o mas goles), la estrategia más común es jugar a la defensiva y no seguir acumulando puntos.Otro ejemplo es la moral; cuando un equipo va perdiendo por goleada, es común que su moral baje y con ello el rendimiento general del equipo, lo que termina en más anotaciones por parte del equipo con ventaja.
+
+
+
+
+
